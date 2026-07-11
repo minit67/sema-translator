@@ -4,6 +4,8 @@
 
 **This document is written to be fed to Claude Code / OpenCode as the build plan.** Follow the phases in order. Do not skip to later phases before the acceptance criteria of the current one pass. Build the smallest thing that passes each phase, then move on.
 
+> **⚠️ Repo note:** This repository is a **standalone home for the translator AGENT only** (Python, `/agent`). Any path below under `client/` or `server/` refers to the **separate Zoiko Sema repo**, NOT this one — those files are not here and should not be looked for locally. The client-side changes (language picker, captions, subscription logic in Phases 3+) will land as a branch/PR on the Zoiko repo later. For now, only the agent is built here.
+
 ---
 
 ## 0. How to use this doc
