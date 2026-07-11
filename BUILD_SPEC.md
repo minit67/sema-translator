@@ -74,6 +74,8 @@ These are confirmed against the repo. Build to exactly this.
 - **AI provider: OpenAI for all three steps.** STT, translation, and TTS via OpenAI, using LiveKit's official OpenAI plugin(s). One `OPENAI_API_KEY`.
 - **Target languages (v1): `["te", "en", "hi", "es"]`** — Telugu, English, Hindi, Spanish.
 
+> **✅ RESOLVED (2026-07-11):** No `OPENAI_API_KEY` was available during Phase 1 dev. Considered switching to Groq as a substitute, but confirmed via Groq's own docs (console.groq.com/docs/text-to-speech) that Groq TTS only supports English and Arabic — no Hindi, Spanish, or Telugu, which are required target languages. Raised in-group; **decision is to keep OpenAI as the AI provider (per the locked decision above) and wait for a real `OPENAI_API_KEY`**, rather than switch providers. A `GROQ_API_KEY` remains stored in `agent/.env` but is not wired into the code.
+
 ---
 
 ## Phase 0 — RESOLVED ✅

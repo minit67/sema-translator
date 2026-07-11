@@ -5,6 +5,15 @@ speakers' audio, runs streaming STT (OpenAI, language auto-detect), and logs
 transcripts. No translation, no TTS, no published audio yet — see
 `BUILD_SPEC.md` §6 Phase 1.
 
+## Status (2026-07-11)
+
+Environment is set up and the worker connects to LiveKit successfully, but
+Phase 1 acceptance (real transcripts from real speech) is blocked on a real
+`OPENAI_API_KEY` — `.env` currently has a placeholder only. Switching to Groq
+was considered and rejected: Groq TTS only supports English/Arabic, not the
+Hindi/Spanish/Telugu this project needs (see `BUILD_SPEC.md` §3). Waiting on
+a real OpenAI key to proceed.
+
 ## Setup
 
 Requires Python 3.10+ (livekit-agents uses `typing.TypeAlias`, unavailable on 3.9).
