@@ -7,11 +7,14 @@ TTS, no audio published yet.
 import asyncio
 import logging
 
+from dotenv import load_dotenv
 from livekit import rtc
 from livekit.agents import AutoSubscribe, JobContext, JobRequest, WorkerOptions, cli, stt
 from livekit.plugins import openai
 
 from config import AGENT_IDENTITY, AGENT_NAME
+
+load_dotenv()
 
 logger = logging.getLogger("translator-agent")
 
