@@ -1,26 +1,29 @@
 """
-Phase 1 (BUILD_SPEC.md §6): agent joins a room, transcribes human speakers,
-logs interim/final transcripts with detected language. No translation, no
-TTS, no audio published yet.
+Phase 2 (BUILD_SPEC.md §6): agent joins a room, transcribes human speakers,
+translates each final segment into one hard-coded target language, and
+publishes the synthesized speech as a single `translation-<lang>` track.
 """
 
 import asyncio
 import logging
 
 import numpy as np
+import openai as openai_sdk
 
 from dotenv import load_dotenv
 from livekit import rtc
 from livekit.agents import AutoSubscribe, JobContext, JobRequest, WorkerOptions, cli, stt
 from livekit.plugins import openai
 
-from config import AGENT_IDENTITY, AGENT_NAME
+from config import AGENT_IDENTITY, AGENT_NAME, PHASE2_TARGET_LANG
 
 load_dotenv()
 
 logger = logging.getLogger("sema-interpreter-agent")
 
 stt_provider = openai.STT(detect_language=True)
+tts_provider = openai.TTS()
+translate_client = openai_sdk.AsyncOpenAI()
 
 
 def is_agent(participant: rtc.RemoteParticipant) -> bool:
@@ -31,7 +34,58 @@ def is_agent(participant: rtc.RemoteParticipant) -> bool:
     )
 
 
-async def transcribe_track(participant: rtc.RemoteParticipant, track: rtc.Track) -> None:
+async def translate_text(text: str, source_lang: str, target_lang: str) -> str:
+    resp = await translate_client.chat.completions.create(
+        model="gpt-4o-mini",
+        temperature=0,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    f"Translate the user's message from {source_lang} to "
+                    f"{target_lang}. Reply with only the translated text — "
+                    "no quotes, no explanation."
+                ),
+            },
+            {"role": "user", "content": text},
+        ],
+    )
+    return resp.choices[0].message.content.strip()
+
+
+async def speak_translation(
+    audio_source: rtc.AudioSource, translation_lock: asyncio.Lock, text: str
+) -> None:
+    # Serialize playback on the shared track so overlapping speakers'
+    # translations don't interleave into garbled audio.
+    async with translation_lock:
+        async for synthesized in tts_provider.synthesize(text):
+            await audio_source.capture_frame(synthesized.frame)
+
+
+async def translate_and_speak(
+    participant: rtc.RemoteParticipant,
+    text: str,
+    source_lang: str,
+    audio_source: rtc.AudioSource,
+    translation_lock: asyncio.Lock,
+) -> None:
+    if source_lang == PHASE2_TARGET_LANG:
+        return
+    try:
+        translated = await translate_text(text, source_lang, PHASE2_TARGET_LANG)
+        logger.info("[%s] (%s) translated: %s", participant.identity, PHASE2_TARGET_LANG, translated)
+        await speak_translation(audio_source, translation_lock, translated)
+    except Exception:
+        logger.exception("translate/speak failed for %s", participant.identity)
+
+
+async def transcribe_track(
+    participant: rtc.RemoteParticipant,
+    track: rtc.Track,
+    audio_source: rtc.AudioSource,
+    translation_lock: asyncio.Lock,
+) -> None:
     audio_stream = rtc.AudioStream(track, sample_rate=24000, num_channels=1)
     stt_stream = stt_provider.stream()
 
@@ -48,6 +102,12 @@ async def transcribe_track(participant: rtc.RemoteParticipant, track: rtc.Track)
                 logger.info(
                     "[%s] (%s, final) %s", participant.identity, alt.language, alt.text
                 )
+                if alt.text.strip():
+                    asyncio.create_task(
+                        translate_and_speak(
+                            participant, alt.text, alt.language, audio_source, translation_lock
+                        )
+                    )
 
     forward_task = asyncio.create_task(forward())
     frame_count = 0
@@ -68,6 +128,14 @@ async def transcribe_track(participant: rtc.RemoteParticipant, track: rtc.Track)
 
 
 async def entrypoint(ctx: JobContext) -> None:
+    audio_source = rtc.AudioSource(
+        sample_rate=tts_provider.sample_rate, num_channels=tts_provider.num_channels
+    )
+    translation_lock = asyncio.Lock()
+    translation_track = rtc.LocalAudioTrack.create_audio_track(
+        f"translation-{PHASE2_TARGET_LANG}", audio_source
+    )
+
     @ctx.room.on("track_subscribed")
     def on_track_subscribed(
         track: rtc.Track,
@@ -79,9 +147,16 @@ async def entrypoint(ctx: JobContext) -> None:
         if is_agent(participant):
             return
         logger.info("subscribing STT to participant: %s", participant.identity)
-        asyncio.create_task(transcribe_track(participant, track))
+        asyncio.create_task(
+            transcribe_track(participant, track, audio_source, translation_lock)
+        )
 
     await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
+    await ctx.room.local_participant.publish_track(
+        translation_track,
+        rtc.TrackPublishOptions(source=rtc.TrackSource.SOURCE_MICROPHONE),
+    )
+    logger.info("published translation-%s track", PHASE2_TARGET_LANG)
 
 
 async def request_fnc(req: JobRequest) -> None:
