@@ -42,7 +42,7 @@ If a task feels like it belongs in "DO NOT BUILD," stop and confirm before doing
         ▼ (audio track)      ▼                ▼                ▼
   ┌──────────────────────── LiveKit room ────────────────────────┐
   │                                                                │
-  │   Translator Agent (server-side, identity = "translator")     │
+  │   Sema Interpreter Agent (server-side, identity = "sema-interpreter") │
   │     • subscribes to each HUMAN speaker track                   │
   │     • STT (with source-language detect)                        │
   │     • translate → each configured target language              │
@@ -91,8 +91,8 @@ Before writing agent code, read these to learn the exact room-naming and token f
 ## 4. Repo layout (add, don't restructure)
 
 ```
-/agent/                         # NEW — the translator agent (Python, livekit-agents)
-  translator_agent.py           # worker entrypoint + pipeline
+/agent/                         # NEW — the Sema Interpreter agent (Python, livekit-agents)
+  interpreter_agent.py          # worker entrypoint + pipeline
   config.py                     # target languages, voice map
   requirements.txt
   .env.example
@@ -140,7 +140,7 @@ via `localParticipant.setAttributes(...)`. The Agent reads these to know which l
 Clients render only messages where `targetLang === my listeningLang`. Send interim (`final:false`) updates too if latency allows; otherwise final-only is fine for v1.
 
 ### Agent identity
-The Agent joins with a fixed identity, e.g. `translator-agent`. **Everything keys off this identity** for echo prevention (see §10).
+The Agent joins with a fixed identity, e.g. `sema-interpreter-agent` (canonical naming: `docs/naming_spec.md`). **Everything keys off this identity** for echo prevention (see §10).
 
 ---
 
@@ -205,10 +205,10 @@ Handle the things that break live audio.
 > The agent is **Python** using the `livekit-agents` SDK + OpenAI plugin(s). The block below is **structural pseudocode** — match real imports/signatures to the current `livekit-agents` docs.
 
 ```python
-# translator_agent.py  (structure/intent only — verify against current docs)
+# interpreter_agent.py  (structure/intent only — verify against current docs)
 
 TARGET_LANGS = ["en", "hi", "es", "te"]
-AGENT_IDENTITY = "translator-agent"
+AGENT_IDENTITY = "sema-interpreter-agent"
 
 async def entrypoint(ctx):
     await ctx.connect()  # join the room
@@ -239,7 +239,7 @@ async def entrypoint(ctx):
     on_track_subscribed(ctx.room, handle_speaker)  # only human tracks
 
 def is_agent(participant):
-    return participant.identity == AGENT_IDENTITY or participant.identity.startswith("translator")
+    return participant.identity == AGENT_IDENTITY or participant.identity.startswith("sema-interpreter")
 ```
 
 Key point: **create each language's `AudioSource`/track once**, then keep pushing frames into it. Don't create a new track per utterance.
@@ -295,7 +295,7 @@ The client keeps using Zoiko's **existing** token endpoint to join rooms. No AI 
 
 ## 10. Gotchas / must-not-break rules
 
-1. **Echo / self-transcription (the #1 bug).** The Agent publishes audio into the same room it listens to. If it transcribes its own `translation-*` tracks, it will translate its own output forever. **Guard by participant identity**: only run STT on tracks whose publisher is a human (not `translator-agent`, not any agent). Verify this in Phase 4 explicitly.
+1. **Echo / self-transcription (the #1 bug).** The Agent publishes audio into the same room it listens to. If it transcribes its own `translation-*` tracks, it will translate its own output forever. **Guard by participant identity**: only run STT on tracks whose publisher is a human (not `sema-interpreter-agent`, not any agent). Verify this in Phase 4 explicitly.
 2. **Keys stay server-side.** All STT/translate/TTS calls happen in the Agent. The browser never sees an AI key.
 3. **One track per language, created once.** Don't spawn tracks per utterance; reuse the per-language `AudioSource`.
 4. **Serialize TTS per language.** Two overlapping translations on one track = garble. Queue per language.
