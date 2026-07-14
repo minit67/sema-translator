@@ -7,13 +7,19 @@ each final segment into one hard-coded target language, and publishes the
 synthesized speech back into the room as a single `translation-en` track —
 see `BUILD_SPEC.md` §6 Phase 2.
 
-## Status (2026-07-13)
+## Status (2026-07-14)
 
 Phase 1 (transcription) is verified. Phase 2 (translate + speak back, one
-language) is coded but **not yet verified live**: the `OPENAI_API_KEY` in
-`.env` authenticates but has no usable quota (`429 insufficient_quota` on
-chat/TTS calls), so translate/TTS calls fail until billing is added to the
-account. Switching to Groq or NVIDIA Riva was considered as a cheaper/free
+language) is coded; the OpenAI key quota issue from 2026-07-13 is resolved.
+Live testing on 2026-07-14 still did not pass the Phase 2 acceptance test —
+audio reaching the agent was distorted, traced (via a native-vs-resampled
+capture comparison and a no-agent-involved raw room capture) to a real
+connection-quality drop and latency spike in the LiveKit session itself,
+confirmed in LiveKit's own dashboard, not the agent code, microphone, or
+OpenAI. Also found that day: `LIVEKIT_URL` in `.env` points to a
+`*.livekit.cloud` domain, not a self-hosted server as `BUILD_SPEC.md` §3
+states — needs reconfirmation with whoever owns the LiveKit account.
+Switching to Groq or NVIDIA Riva was considered as a cheaper/free
 alternative and ruled out: Groq TTS only supports English/Arabic, NVIDIA Riva
 TTS has no Hindi or Telugu — neither covers the required Hindi/Spanish/Telugu
 set (see `BUILD_SPEC.md` §3).
